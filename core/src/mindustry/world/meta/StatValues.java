@@ -8,10 +8,12 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import mindustry.*;
 import mindustry.content.*;
 import mindustry.ctype.*;
 import mindustry.entities.bullet.*;
 import mindustry.gen.*;
+import mindustry.maps.*;
 import mindustry.type.*;
 import mindustry.ui.*;
 import mindustry.world.*;
@@ -117,6 +119,51 @@ public class StatValues{
         );
     }
 
+    public static StatValue floors(Attribute attr, boolean floating, float scale, boolean startZero){
+        return table -> table.table(c -> {
+            Runnable[] rebuild = {null};
+            Map[] lastMap = {null};
+
+            rebuild[0] = () -> {
+                c.clearChildren();
+                c.left();
+
+                if(state.isGame()){
+                    var blocks = Vars.content.blocks()
+                    .select(block -> block instanceof Floor f && indexer.isBlockPresent(block) && f.attributes.get(attr) != 0 && !(f.isLiquid && !floating))
+                    .<Floor>as().with(s -> s.sort(f -> f.attributes.get(attr)));
+
+                    if(blocks.any()){
+                        int i = 0;
+                        for(var block : blocks){
+
+                            floorEfficiency(block, block.attributes.get(attr) * scale, startZero).display(c);
+                            if(++i % 5 == 0){
+                                c.row();
+                            }
+                        }
+                    }else{
+                        c.add("@none.found");
+                    }
+                }else{
+                    c.add("@stat.showinmap");
+                }
+            };
+
+            rebuild[0].run();
+
+            //rebuild when map changes.
+            c.update(() -> {
+                Map current = state.isGame() ? state.map : null;
+
+                if(current != lastMap[0]){
+                    rebuild[0].run();
+                    lastMap[0] = current;
+                }
+            });
+        });
+    }
+
     public static StatValue blocks(Boolf<Block> pred){
         return blocks(content.blocks().select(pred));
     }
@@ -198,15 +245,10 @@ public class StatValues{
 
                 table.image(region).size(60).scaling(Scaling.bounded).right().top();
 
-                table.table(Tex.underline,  w -> {
+                table.table(Tex.underline, w -> {
                     w.left().defaults().padRight(3).left();
 
-                    if(weapon.inaccuracy > 0){
-                        sep(w, "[lightgray]" + Stat.inaccuracy.localized() + ": [white]" + (int)weapon.inaccuracy + " " + StatUnit.degrees.localized());
-                    }
-                    sep(w, "[lightgray]" + Stat.reload.localized() + ": " + (weapon.mirror ? "2x " : "") + "[white]" + Strings.autoFixed(60f / weapon.reload * weapon.shots, 2));
-
-                    ammo(ObjectMap.of(unit, weapon.bullet)).display(w);
+                    weapon.addStats(unit, w);
                 }).padTop(-9).left();
                 table.row();
             }
@@ -251,7 +293,7 @@ public class StatValues{
                         sep(bt, Core.bundle.format("bullet.splashdamage", (int)type.splashDamage, Strings.fixed(type.splashDamageRadius / tilesize, 1)));
                     }
 
-                    if(!unit && !Mathf.equal(type.ammoMultiplier, 1f)){
+                    if(!unit && !Mathf.equal(type.ammoMultiplier, 1f) && type.displayAmmoMultiplier){
                         sep(bt, Core.bundle.format("bullet.multiplier", (int)type.ammoMultiplier));
                     }
 
@@ -275,10 +317,6 @@ public class StatValues{
                         sep(bt, "@bullet.incendiary");
                     }
 
-                    if(type.status != StatusEffects.none){
-                        sep(bt, (type.minfo.mod == null ? type.status.emoji() : "") + "[stat]" + type.status.localizedName);
-                    }
-
                     if(type.homingPower > 0.01f){
                         sep(bt, "@bullet.homing");
                     }
@@ -290,6 +328,10 @@ public class StatValues{
                     if(type.fragBullet != null){
                         sep(bt, "@bullet.frag");
                     }
+
+                    if(type.status != StatusEffects.none){
+                        sep(bt, (type.minfo.mod == null ? type.status.emoji() : "") + "[stat]" + type.status.localizedName);
+                    }
                 }).padTop(unit ? 0 : -9).left().get().background(unit ? null : Tex.underline);
 
                 table.row();
@@ -298,7 +340,6 @@ public class StatValues{
     }
 
     //for AmmoListValue
-
     private static void sep(Table table, String text){
         table.row();
         table.add(text);

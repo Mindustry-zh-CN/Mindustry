@@ -43,7 +43,7 @@ public class Logic implements ApplicationListener{
 
         Events.on(BlockBuildEndEvent.class, event -> {
             if(!event.breaking){
-                TeamData data = state.teams.get(event.team);
+                TeamData data = event.team.data();
                 Iterator<BlockPlan> it = data.blocks.iterator();
                 while(it.hasNext()){
                     BlockPlan b = it.next();
@@ -182,6 +182,13 @@ public class Logic implements ApplicationListener{
                         entity.items.add(stack.item, Math.min(stack.amount, entity.storageCapacity - entity.items.get(stack.item)));
                     }
                 }
+            }
+        }
+
+        //heal all cores on game start
+        for(TeamData team : state.teams.getActive()){
+            for(var entity : team.cores){
+                entity.heal();
             }
         }
     }
